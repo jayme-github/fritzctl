@@ -6,4 +6,5 @@ jobs:
     working_directory: /root/go/src/github.com/bpicode/fritzctl
     steps:
       - checkout
+      - run: echo $NETRC > ~/.netrc
       - run: make clean sysinfo dist_all

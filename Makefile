@@ -1,5 +1,5 @@
 FIRST_GOPATH              := $(firstword $(subst :, ,$(GOPATH)))
-PKGS                      := $(shell go list ./...)
+PKGS                      := $(shell vgo list ./...)
 GOFILES_NOVENDOR          := $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 FRITZCTL_VERSION          ?= unknown
 FRITZCTL_OUTPUT           ?= fritzctl
@@ -11,7 +11,7 @@ DEPENDENCIES_GRAPH_OUTPUT ?= "dependencies.png"
 BUILDFLAGS                := -ldflags="-s -w -X github.com/bpicode/fritzctl/config.Version=$(FRITZCTL_VERSION) -X github.com/bpicode/fritzctl/config.Revision=$(FRITZCTL_REVISION)" -gcflags="-trimpath=$(GOPATH)" -asmflags="-trimpath=$(GOPATH)"
 TESTFLAGS                 ?=
 
-all: sysinfo build install test codequality completion_bash man copyright
+all: toolchain sysinfo build install test codequality completion_bash man copyright
 
 .PHONY: clean build man copyright
 
@@ -21,20 +21,26 @@ define ok
 	@tput sgr0 2>/dev/null || echo -n ""
 endef
 
-sysinfo:
+toolchain:
+	@echo ">> TOOLCHAIN"
+	@echo -n "     vgo:"
+	@go get -u golang.org/x/vgo
+	@$(call ok)
+
+sysinfo: toolchain
 	@echo ">> SYSTEM INFORMATION"
 	@echo -n "     PLATFORM: $(shell uname -a)"
 	@$(call ok)
 	@echo -n "     PWD:    : $(shell pwd)"
 	@$(call ok)
-	@echo -n "     GO      : $(shell go version)"
+	@echo -n "     GO      : $(shell vgo version)"
 	@$(call ok)
 	@echo -n "     BUILDFLAGS: $(BUILDFLAGS)"
 	@$(call ok)
 
-clean:
+clean: toolchain
 	@echo -n ">> CLEAN"
-	@go clean -i
+	@vgo clean -i
 	@rm -f ./os/completion/fritzctl
 	@rm -f ./os/man/*.gz
 	@rm -f ./os/doc/copyright
@@ -48,7 +54,7 @@ clean:
 
 deps:
 	@echo -n ">> DEPENDENCIES"
-	@go get -u github.com/golang/dep/cmd/dep
+	@vgo get -u github.com/golang/dep/cmd/dep
 	@dep ensure
 	@$(call ok)
 
@@ -63,12 +69,12 @@ depgraph: deps
 
 build:
 	@echo -n ">> BUILD, version = $(FRITZCTL_VERSION)/$(FRITZCTL_REVISION), output = $(FRITZCTL_OUTPUT)"
-	@go build -o $(FRITZCTL_OUTPUT) $(BUILDFLAGS)
+	@vgo build -o $(FRITZCTL_OUTPUT) $(BUILDFLAGS)
 	@$(call ok)
 
 install:
 	@echo -n ">> INSTALL, version = $(FRITZCTL_VERSION)"
-	@go install $(BUILDFLAGS)
+	@vgo install $(BUILDFLAGS)
 	@$(call ok)
 
 test: build
@@ -76,27 +82,27 @@ test: build
 	@echo "mode: count" > coverage-all.out
 	@$(foreach pkg, $(PKGS),\
 	    echo -n "     ";\
-		go test -run '(Test|Example)' $(BUILDFLAGS) $(TESTFLAGS) -race -coverprofile=coverage.out -covermode=atomic $(pkg) || exit 1;\
+		vgo test -run '(Test|Example)' $(BUILDFLAGS) $(TESTFLAGS) -race -coverprofile=coverage.out -covermode=atomic $(pkg) || exit 1;\
 		tail -n +2 coverage.out >> coverage-all.out;)
-	@go tool cover -html=coverage-all.out -o coverage-all.html
+	@vgo tool cover -html=coverage-all.out -o coverage-all.html
 
 fasttest: build
 	@echo ">> TEST, \"fast-mode\": race detector off"
 	@echo "mode: count" > coverage-all.out
 	@$(foreach pkg, $(PKGS),\
 	    echo -n "     ";\
-		go test  -run '(Test|Example)' $(BUILDFLAGS) $(TESTFLAGS) -coverprofile=coverage.out $(pkg) || exit 1;\
+		vgo test  -run '(Test|Example)' $(BUILDFLAGS) $(TESTFLAGS) -coverprofile=coverage.out $(pkg) || exit 1;\
 		tail -n +2 coverage.out >> coverage-all.out;)
-	@go tool cover -html=coverage-all.out
+	@vgo tool cover -html=coverage-all.out
 
 completion_bash:
 	@echo -n ">> BASH COMPLETION, output = $(BASH_COMPLETION_OUTPUT)"
-	@go run main.go completion bash > $(BASH_COMPLETION_OUTPUT)
+	@vgo run main.go completion bash > $(BASH_COMPLETION_OUTPUT)
 	@$(call ok)
 
 man:
 	@echo -n ">> MAN PAGE, output = $(MAN_PAGE_OUTPUT).gz"
-	@go run main.go doc man > $(MAN_PAGE_OUTPUT)
+	@vgo run main.go doc man > $(MAN_PAGE_OUTPUT)
 	@gzip --force $(MAN_PAGE_OUTPUT)
 	@$(call ok)
 
@@ -126,7 +132,7 @@ codequality:
 	@$(call ok)
 
 	@echo -n "     VET"
-	@go vet ./...
+	@vgo vet ./...
 	@$(call ok)
 
 	@echo -n "     CYCLO"
@@ -177,7 +183,7 @@ dist_all: dist_linux dist_darwin dist_win dist_bsd
 
 define dist
 	@echo  -n ">> BUILD, $(1)/$(2) "
-	@(GOOS=$(1) GOARCH=$(2) go build -o $(3) $(BUILDFLAGS))
+	@(GOOS=$(1) GOARCH=$(2) vgo build -o $(3) $(BUILDFLAGS))
 	@cp $(3) build/distributions/fritzctl-$(1)-$(2)$(4)
 	@cd build/distributions && shasum -a 256 "fritzctl-$(1)-$(2)$(4)" | tee "fritzctl-$(1)-$(2)$(4).sha256" | cut -b 1-64 | tr -d "\n"
 	@$(call ok)
@@ -298,7 +304,7 @@ publish_win:
 
 demogif:
 	@echo ">> DEMO GIF"
-	@go build -o mock/standalone/standalone  mock/standalone/main.go
+	@vgo build -o mock/standalone/standalone  mock/standalone/main.go
 	@(cd mock/ && standalone/./standalone -httptest.serve=127.0.0.1:8000 & echo $$! > /tmp/TEST_SERVER.PID)
 	@sleep 2
 	@(cd mock/ && asciinema rec -c '/bin/sh' ../images/fritzctl_demo.json)
